@@ -1,0 +1,359 @@
+package analizadores;
+
+import java_cup.runtime.Symbol;
+import java.util.ArrayList;
+import java.util.Map;
+
+parser code
+{:
+    public static BaseDatos baseActual = null;
+
+    public void syntax_error(Symbol s){
+        System.out.println(
+            "Error sintactico en linea " + s.left +
+            ", columna " + s.right +
+            ", texto: " + s.value
+        );
+    }
+
+    public void mostrarConsulta(String nombreTabla, ConsultaResultado consulta){
+        if (baseActual == null) {
+            System.out.println("Error: no hay una base de datos activa.");
+            return;
+        }
+
+        Tabla tabla = baseActual.buscarTabla(nombreTabla);
+        if (tabla == null) {
+            System.out.println("Error: la tabla '" + nombreTabla + "' no existe.");
+            return;
+        }
+
+        System.out.println("Resultado de consulta sobre tabla: " + nombreTabla);
+
+        if (tabla.getRegistros().isEmpty()) {
+            System.out.println("(sin registros)");
+            return;
+        }
+
+        for (Registro registro : tabla.getRegistros()) {
+            if (consulta.isTodosLosCampos()) {
+                System.out.println(registro);
+            } else {
+                StringBuilder sb = new StringBuilder("{ ");
+                boolean primero = true;
+
+                for (String campo : consulta.getCampos()) {
+                    Object valor = registro.getValor(campo);
+
+                    if (!primero) {
+                        sb.append(", ");
+                    }
+
+                    sb.append(campo).append(": ").append(valor);
+                    primero = false;
+                }
+
+                sb.append(" }");
+                System.out.println(sb.toString());
+            }
+        }
+    }
+:};
+
+terminal DATABASE, USE, TABLE, READ, FIELDS, FILTER, STORE, AT, EXPORT, ADD, UPDATE, SET, CLEAR;
+
+terminal TINT, TFLOAT, TBOOL, TSTRING, TARRAY, TOBJECT;
+terminal TRUE, FALSE, NULL;
+
+terminal IGUALIGUAL, DIFERENTE, MAYORIGUAL, MENORIGUAL, MAYOR, MENOR;
+terminal AND, OR, NOT;
+
+terminal LLAVE_IZQ, LLAVE_DER, PAR_IZQ, PAR_DER, COR_IZQ, COR_DER;
+terminal DOS_PUNTOS, PTCOMA, COMA;
+terminal IGUAL, ASTERISCO;
+
+terminal String ENTERO;
+terminal String DECIMAL;
+terminal String CADENA;
+terminal String ID;
+
+non terminal programa;
+non terminal sentencia;
+
+non terminal ArrayList lista_campos;
+non terminal Campo campo;
+non terminal String tipo;
+
+non terminal ArrayList lista_asignaciones;
+non terminal AsignacionDato asignacion;
+non terminal Object valor;
+
+non terminal ArrayList lista_ids;
+non terminal ConsultaResultado bloque_read;
+non terminal condicion;
+non terminal operador_relacional;
+
+non terminal bloque_update;
+non terminal String bloque_database;
+non terminal ConsultaResultado seleccion_campos;
+non terminal ArrayList lista_set;
+non terminal AsignacionDato asignacion_set;
+
+precedence left OR;
+precedence left AND;
+precedence right NOT;
+
+start with programa;
+
+programa ::= programa sentencia
+           | sentencia
+           ;
+
+sentencia ::= DATABASE ID:n LLAVE_IZQ bloque_database:r LLAVE_DER
+{:
+    baseActual = new BaseDatos(n.toString(), r);
+    System.out.println("Base de datos creada: " + n);
+    System.out.println("Ruta JSON: " + r);
+:}
+            | USE ID:n PTCOMA
+{:
+    if (baseActual != null && baseActual.getNombre().equals(n.toString())) {
+        System.out.println("Base de datos activa: " + n);
+    } else {
+        System.out.println("Advertencia: la base de datos '" + n + "' no existe o no coincide con la actual.");
+    }
+:}
+            | EXPORT CADENA:r PTCOMA
+{:
+    System.out.println("Exportar a: " + r);
+:}
+            | TABLE ID:n LLAVE_IZQ lista_campos:lc LLAVE_DER
+{:
+    if (baseActual != null) {
+        Tabla tabla = new Tabla(n.toString());
+
+        for (Object obj : lc) {
+            tabla.agregarCampo((Campo)obj);
+        }
+
+        baseActual.agregarTabla(tabla);
+        System.out.println("Tabla creada: " + n);
+    } else {
+        System.out.println("Error: no hay una base de datos activa para crear la tabla " + n);
+    }
+:}
+            | ADD ID:n LLAVE_IZQ lista_asignaciones:la LLAVE_DER PTCOMA
+{:
+    if (baseActual != null) {
+        Tabla tabla = baseActual.buscarTabla(n.toString());
+
+        if (tabla != null) {
+            Registro registro = new Registro();
+
+            for (Object obj : la) {
+                AsignacionDato ad = (AsignacionDato)obj;
+                registro.agregarValor(ad.getCampo(), ad.getValor());
+            }
+
+            tabla.agregarRegistro(registro);
+            System.out.println("Registro agregado en tabla: " + n);
+        } else {
+            System.out.println("Error: la tabla '" + n + "' no existe.");
+        }
+    } else {
+        System.out.println("Error: no hay una base de datos activa.");
+    }
+:}
+            | READ ID:n LLAVE_IZQ bloque_read:br LLAVE_DER PTCOMA
+{:
+    mostrarConsulta(n.toString(), br);
+:}
+            | UPDATE ID LLAVE_IZQ bloque_update LLAVE_DER PTCOMA
+            | CLEAR ID:n PTCOMA
+{:
+    if (baseActual != null) {
+        Tabla tabla = baseActual.buscarTabla(n.toString());
+        if (tabla != null) {
+            tabla.limpiarRegistros();
+            System.out.println("Tabla limpiada: " + n);
+        } else {
+            System.out.println("Error: la tabla '" + n + "' no existe.");
+        }
+    } else {
+        System.out.println("Error: no hay una base de datos activa.");
+    }
+:}
+            ;
+
+bloque_database ::= STORE AT CADENA:r PTCOMA
+{:
+    RESULT = r.toString().replace("\"", "");
+:}
+                  ;
+
+lista_campos ::= lista_campos:lc campo:c
+{:
+    lc.add(c);
+    RESULT = lc;
+:}
+               | campo:c
+{:
+    ArrayList lista = new ArrayList();
+    lista.add(c);
+    RESULT = lista;
+:}
+               ;
+
+campo ::= ID:n DOS_PUNTOS tipo:t PTCOMA
+{:
+    RESULT = new Campo(n.toString(), t);
+:}
+        ;
+
+tipo ::= TINT
+{:
+    RESULT = "int";
+:}
+       | TFLOAT
+{:
+    RESULT = "float";
+:}
+       | TBOOL
+{:
+    RESULT = "bool";
+:}
+       | TSTRING
+{:
+    RESULT = "string";
+:}
+       | TARRAY
+{:
+    RESULT = "array";
+:}
+       | TOBJECT
+{:
+    RESULT = "object";
+:}
+       ;
+
+lista_asignaciones ::= lista_asignaciones:la COMA asignacion:a
+{:
+    la.add(a);
+    RESULT = la;
+:}
+                     | asignacion:a
+{:
+    ArrayList lista = new ArrayList();
+    lista.add(a);
+    RESULT = lista;
+:}
+                     ;
+
+asignacion ::= ID:n DOS_PUNTOS valor:v
+{:
+    RESULT = new AsignacionDato(n.toString(), v);
+:}
+             ;
+
+valor ::= ENTERO:e
+{:
+    RESULT = Integer.parseInt(e.toString());
+:}
+        | DECIMAL:d
+{:
+    RESULT = Double.parseDouble(d.toString());
+:}
+        | CADENA:c
+{:
+    RESULT = c.toString().substring(1, c.toString().length() - 1);
+:}
+        | TRUE
+{:
+    RESULT = true;
+:}
+        | FALSE
+{:
+    RESULT = false;
+:}
+        | NULL
+{:
+    RESULT = null;
+:}
+        ;
+
+bloque_read ::= FIELDS DOS_PUNTOS seleccion_campos:s PTCOMA
+{:
+    RESULT = s;
+:}
+              | FIELDS DOS_PUNTOS seleccion_campos:s PTCOMA FILTER DOS_PUNTOS condicion PTCOMA
+{:
+    System.out.println("Aviso: filter reconocido sintacticamente, pero aun no aplicado semantica.");
+    RESULT = s;
+:}
+              ;
+
+seleccion_campos ::= lista_ids:l
+{:
+    ConsultaResultado cr = new ConsultaResultado();
+    cr.setCampos(l);
+    cr.setTodosLosCampos(false);
+    RESULT = cr;
+:}
+                   | ASTERISCO
+{:
+    ConsultaResultado cr = new ConsultaResultado();
+    cr.setTodosLosCampos(true);
+    RESULT = cr;
+:}
+                   ;
+
+lista_ids ::= lista_ids:l COMA ID:n
+{:
+    l.add(n.toString());
+    RESULT = l;
+:}
+            | ID:n
+{:
+    ArrayList lista = new ArrayList();
+    lista.add(n.toString());
+    RESULT = lista;
+:}
+            ;
+
+bloque_update ::= SET DOS_PUNTOS lista_set PTCOMA FILTER DOS_PUNTOS condicion PTCOMA
+                | SET DOS_PUNTOS lista_set PTCOMA
+                ;
+
+lista_set ::= lista_set:l COMA asignacion_set:a
+{:
+    l.add(a);
+    RESULT = l;
+:}
+            | asignacion_set:a
+{:
+    ArrayList lista = new ArrayList();
+    lista.add(a);
+    RESULT = lista;
+:}
+            ;
+
+asignacion_set ::= ID:n IGUAL valor:v
+{:
+    RESULT = new AsignacionDato(n.toString(), v);
+:}
+                 ;
+
+condicion ::= ID operador_relacional valor
+            | condicion AND condicion
+            | condicion OR condicion
+            | NOT condicion
+            | PAR_IZQ condicion PAR_DER
+            ;
+
+operador_relacional ::= IGUALIGUAL
+                      | DIFERENTE
+                      | MAYORIGUAL
+                      | MENORIGUAL
+                      | MAYOR
+                      | MENOR
+                      ;
