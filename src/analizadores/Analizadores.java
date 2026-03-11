@@ -5,32 +5,12 @@ import java.io.StringReader;
 public class Analizadores {
     public static void main(String[] args) {
         try {
-            String entrada = """
+          String entrada = """
     database tienda {
         store at "tienda.json";
     }
 
     use tienda;
-
-    table productos {
-        id : int;
-        nombre : string;
-        precio : float;
-    }
-
-    add productos {
-        id: 1,
-        nombre: "Laptop",
-        precio: 3500.50
-    };
-
-    add productos {
-        id: 2,
-        nombre: "Mouse",
-        precio: 150.00
-    };
-
-    clear productos;
 
     read productos {
         fields: nombre, precio;
@@ -41,6 +21,9 @@ public class Analizadores {
             Sintactico parser = new Sintactico(lexer);
 
             parser.parse();
+            
+            ReporteHTML.generarReporteTokens(lexer.listaTokens, "reporte_tokens.html");
+            ReporteHTML.generarReporteErrores(lexer.listaErrores, "reporte_errores.html");
 
             System.out.println("Analisis realizado correctamente.");
 

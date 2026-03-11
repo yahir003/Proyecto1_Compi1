@@ -1,0 +1,17 @@
+{
+  "database": "tienda",
+  "tables": [
+    {
+      "name": "productos",
+      "schema": {
+        "id": "int",
+        "nombre": "string",
+        "precio": "float"
+      },
+      "records": [
+        {"id": 1, "nombre": "Laptop", "precio": 3500.5},
+        {"id": 2, "nombre": "Mouse", "precio": 200.0}
+      ]
+    }
+  ]
+}

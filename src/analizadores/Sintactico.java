@@ -233,6 +233,8 @@ public class Sintactico extends java_cup.runtime.lr_parser {
 
 
     public static BaseDatos baseActual = null;
+    public ArrayList<Map<String, Object>> ultimaConsulta = new ArrayList<Map<String, Object>>();
+    public boolean hayConsultaValida = false;
 
     public void syntax_error(Symbol s){
         System.out.println(
@@ -245,12 +247,14 @@ public class Sintactico extends java_cup.runtime.lr_parser {
     public void mostrarConsulta(String nombreTabla, ConsultaResultado consulta){
         if (baseActual == null) {
             System.out.println("Error: no hay una base de datos activa.");
+            hayConsultaValida = false;
             return;
         }
 
         Tabla tabla = baseActual.buscarTabla(nombreTabla);
         if (tabla == null) {
             System.out.println("Error: la tabla '" + nombreTabla + "' no existe.");
+            hayConsultaValida = false;
             return;
         }
 
@@ -258,9 +262,12 @@ public class Sintactico extends java_cup.runtime.lr_parser {
 
         if (tabla.getRegistros().isEmpty()) {
             System.out.println("(sin registros)");
+            ultimaConsulta.clear();
+            hayConsultaValida = true;
             return;
         }
 
+        ultimaConsulta.clear();
         boolean hayResultados = false;
 
         for (Map<String, Object> registro : tabla.getRegistros()) {
@@ -270,14 +277,20 @@ public class Sintactico extends java_cup.runtime.lr_parser {
 
             hayResultados = true;
 
+            Map<String, Object> fila = new LinkedHashMap<String, Object>();
+
             if (consulta.isTodosLosCampos()) {
-                System.out.println(registro);
+                for (Map.Entry<String, Object> entry : registro.entrySet()) {
+                    fila.put(entry.getKey(), entry.getValue());
+                }
+                System.out.println(fila);
             } else {
                 StringBuilder sb = new StringBuilder("{ ");
                 boolean primero = true;
 
                 for (String campo : consulta.getCampos()) {
                     Object valor = registro.get(campo);
+                    fila.put(campo, valor);
 
                     if (!primero) {
                         sb.append(", ");
@@ -290,11 +303,15 @@ public class Sintactico extends java_cup.runtime.lr_parser {
                 sb.append(" }");
                 System.out.println(sb.toString());
             }
+
+            ultimaConsulta.add(fila);
         }
 
         if (!hayResultados) {
             System.out.println("(sin resultados)");
         }
+
+        hayConsultaValida = true;
     }
 
     public boolean cumpleFiltro(Map<String, Object> registro, ExpresionFiltro filtro){
@@ -324,8 +341,60 @@ public class Sintactico extends java_cup.runtime.lr_parser {
                 actualizados++;
             }
         }
+     System.out.println("Registros actualizados en tabla '" + nombreTabla + "': " + actualizados);
+baseActual.guardarEnArchivo();
+    }
 
-        System.out.println("Registros actualizados en tabla '" + nombreTabla + "': " + actualizados);
+    public void exportarJSON(String ruta){
+        if (!hayConsultaValida) {
+            System.out.println("Error: no existe una consulta válida para exportar.");
+            return;
+        }
+
+        try {
+            java.io.PrintWriter writer = new java.io.PrintWriter(ruta, "UTF-8");
+            writer.println("[");
+
+            for (int i = 0; i < ultimaConsulta.size(); i++) {
+                Map<String, Object> registro = ultimaConsulta.get(i);
+                writer.print("  {");
+
+                int j = 0;
+                for (Map.Entry<String, Object> entry : registro.entrySet()) {
+                    writer.print("\"" + entry.getKey() + "\": ");
+
+                    Object valor = entry.getValue();
+
+                    if (valor == null) {
+                        writer.print("null");
+                    } else if (valor instanceof String) {
+                        writer.print("\"" + valor.toString().replace("\"", "\\\"") + "\"");
+                    } else {
+                        writer.print(valor);
+                    }
+
+                    if (j < registro.size() - 1) {
+                        writer.print(", ");
+                    }
+                    j++;
+                }
+
+                writer.print("}");
+
+                if (i < ultimaConsulta.size() - 1) {
+                    writer.println(",");
+                } else {
+                    writer.println();
+                }
+            }
+
+            writer.println("]");
+            writer.close();
+
+            System.out.println("Consulta exportada a: " + ruta);
+        } catch (Exception e) {
+            System.out.println("Error al exportar JSON: " + e.getMessage());
+        }
     }
 
 
@@ -397,8 +466,9 @@ class CUP$Sintactico$actions {
 		String r = (String)((java_cup.runtime.Symbol) CUP$Sintactico$stack.elementAt(CUP$Sintactico$top-1)).value;
 		
     baseActual = new BaseDatos(n.toString(), r);
-    System.out.println("Base de datos creada: " + n);
-    System.out.println("Ruta JSON: " + r);
+System.out.println("Base de datos creada: " + n);
+System.out.println("Ruta JSON: " + r);
+baseActual.cargarDesdeArchivo();
 
               CUP$Sintactico$result = parser.getSymbolFactory().newSymbol("sentencia",1, ((java_cup.runtime.Symbol)CUP$Sintactico$stack.elementAt(CUP$Sintactico$top-4)), ((java_cup.runtime.Symbol)CUP$Sintactico$stack.peek()), RESULT);
             }
@@ -430,7 +500,7 @@ class CUP$Sintactico$actions {
 		int rright = ((java_cup.runtime.Symbol)CUP$Sintactico$stack.elementAt(CUP$Sintactico$top-1)).right;
 		String r = (String)((java_cup.runtime.Symbol) CUP$Sintactico$stack.elementAt(CUP$Sintactico$top-1)).value;
 		
-    System.out.println("Exportar a: " + r);
+    exportarJSON(r.toString().substring(1, r.toString().length() - 1));
 
               CUP$Sintactico$result = parser.getSymbolFactory().newSymbol("sentencia",1, ((java_cup.runtime.Symbol)CUP$Sintactico$stack.elementAt(CUP$Sintactico$top-2)), ((java_cup.runtime.Symbol)CUP$Sintactico$stack.peek()), RESULT);
             }
@@ -455,8 +525,9 @@ class CUP$Sintactico$actions {
             tabla.agregarCampo(c.getNombre(), c.getTipo());
         }
 
-        baseActual.agregarTabla(tabla);
-        System.out.println("Tabla creada: " + n);
+       baseActual.agregarTabla(tabla);
+System.out.println("Tabla creada: " + n);
+baseActual.guardarEnArchivo();
     } else {
         System.out.println("Error: no hay una base de datos activa para crear la tabla " + n);
     }
@@ -476,25 +547,24 @@ class CUP$Sintactico$actions {
 		int laright = ((java_cup.runtime.Symbol)CUP$Sintactico$stack.elementAt(CUP$Sintactico$top-2)).right;
 		ArrayList la = (ArrayList)((java_cup.runtime.Symbol) CUP$Sintactico$stack.elementAt(CUP$Sintactico$top-2)).value;
 		
-    if (baseActual != null) {
-        Tabla tabla = baseActual.buscarTabla(n.toString());
-
-        if (tabla != null) {
-            Map<String, Object> registro = new LinkedHashMap<String, Object>();
-
-            for (Object obj : la) {
-                AsignacionDato ad = (AsignacionDato)obj;
-                registro.put(ad.getCampo(), ad.getValor());
-            }
-
-            tabla.agregarRegistro(registro);
-            System.out.println("Registro agregado en tabla: " + n);
-        } else {
-            System.out.println("Error: la tabla '" + n + "' no existe.");
-        }
+   if (baseActual != null) {
+    if (baseActual.existeTabla(n.toString())) {
+        System.out.println("La tabla '" + n + "' ya existe. Se reutiliza la cargada desde archivo.");
     } else {
-        System.out.println("Error: no hay una base de datos activa.");
+        Tabla tabla = new Tabla(n.toString());
+
+        for (Object obj : lc) {
+            Campo c = (Campo)obj;
+            tabla.agregarCampo(c.getNombre(), c.getTipo());
+        }
+
+        baseActual.agregarTabla(tabla);
+        System.out.println("Tabla creada: " + n);
+        baseActual.guardarEnArchivo();
     }
+} else {
+    System.out.println("Error: no hay una base de datos activa para crear la tabla " + n);
+}
 
               CUP$Sintactico$result = parser.getSymbolFactory().newSymbol("sentencia",1, ((java_cup.runtime.Symbol)CUP$Sintactico$stack.elementAt(CUP$Sintactico$top-5)), ((java_cup.runtime.Symbol)CUP$Sintactico$stack.peek()), RESULT);
             }
@@ -548,8 +618,9 @@ class CUP$Sintactico$actions {
     if (baseActual != null) {
         Tabla tabla = baseActual.buscarTabla(n.toString());
         if (tabla != null) {
-            tabla.limpiarRegistros();
-            System.out.println("Tabla limpiada: " + n);
+           tabla.limpiarRegistros();
+System.out.println("Tabla limpiada: " + n);
+baseActual.guardarEnArchivo();
         } else {
             System.out.println("Error: la tabla '" + n + "' no existe.");
         }

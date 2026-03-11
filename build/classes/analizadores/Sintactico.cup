@@ -8,6 +8,8 @@ import java.util.LinkedHashMap;
 parser code
 {:
     public static BaseDatos baseActual = null;
+    public ArrayList<Map<String, Object>> ultimaConsulta = new ArrayList<Map<String, Object>>();
+    public boolean hayConsultaValida = false;
 
     public void syntax_error(Symbol s){
         System.out.println(
@@ -20,12 +22,14 @@ parser code
     public void mostrarConsulta(String nombreTabla, ConsultaResultado consulta){
         if (baseActual == null) {
             System.out.println("Error: no hay una base de datos activa.");
+            hayConsultaValida = false;
             return;
         }
 
         Tabla tabla = baseActual.buscarTabla(nombreTabla);
         if (tabla == null) {
             System.out.println("Error: la tabla '" + nombreTabla + "' no existe.");
+            hayConsultaValida = false;
             return;
         }
 
@@ -33,9 +37,12 @@ parser code
 
         if (tabla.getRegistros().isEmpty()) {
             System.out.println("(sin registros)");
+            ultimaConsulta.clear();
+            hayConsultaValida = true;
             return;
         }
 
+        ultimaConsulta.clear();
         boolean hayResultados = false;
 
         for (Map<String, Object> registro : tabla.getRegistros()) {
@@ -45,14 +52,20 @@ parser code
 
             hayResultados = true;
 
+            Map<String, Object> fila = new LinkedHashMap<String, Object>();
+
             if (consulta.isTodosLosCampos()) {
-                System.out.println(registro);
+                for (Map.Entry<String, Object> entry : registro.entrySet()) {
+                    fila.put(entry.getKey(), entry.getValue());
+                }
+                System.out.println(fila);
             } else {
                 StringBuilder sb = new StringBuilder("{ ");
                 boolean primero = true;
 
                 for (String campo : consulta.getCampos()) {
                     Object valor = registro.get(campo);
+                    fila.put(campo, valor);
 
                     if (!primero) {
                         sb.append(", ");
@@ -65,11 +78,15 @@ parser code
                 sb.append(" }");
                 System.out.println(sb.toString());
             }
+
+            ultimaConsulta.add(fila);
         }
 
         if (!hayResultados) {
             System.out.println("(sin resultados)");
         }
+
+        hayConsultaValida = true;
     }
 
     public boolean cumpleFiltro(Map<String, Object> registro, ExpresionFiltro filtro){
@@ -99,8 +116,60 @@ parser code
                 actualizados++;
             }
         }
+     System.out.println("Registros actualizados en tabla '" + nombreTabla + "': " + actualizados);
+baseActual.guardarEnArchivo();
+    }
 
-        System.out.println("Registros actualizados en tabla '" + nombreTabla + "': " + actualizados);
+    public void exportarJSON(String ruta){
+        if (!hayConsultaValida) {
+            System.out.println("Error: no existe una consulta válida para exportar.");
+            return;
+        }
+
+        try {
+            java.io.PrintWriter writer = new java.io.PrintWriter(ruta, "UTF-8");
+            writer.println("[");
+
+            for (int i = 0; i < ultimaConsulta.size(); i++) {
+                Map<String, Object> registro = ultimaConsulta.get(i);
+                writer.print("  {");
+
+                int j = 0;
+                for (Map.Entry<String, Object> entry : registro.entrySet()) {
+                    writer.print("\"" + entry.getKey() + "\": ");
+
+                    Object valor = entry.getValue();
+
+                    if (valor == null) {
+                        writer.print("null");
+                    } else if (valor instanceof String) {
+                        writer.print("\"" + valor.toString().replace("\"", "\\\"") + "\"");
+                    } else {
+                        writer.print(valor);
+                    }
+
+                    if (j < registro.size() - 1) {
+                        writer.print(", ");
+                    }
+                    j++;
+                }
+
+                writer.print("}");
+
+                if (i < ultimaConsulta.size() - 1) {
+                    writer.println(",");
+                } else {
+                    writer.println();
+                }
+            }
+
+            writer.println("]");
+            writer.close();
+
+            System.out.println("Consulta exportada a: " + ruta);
+        } catch (Exception e) {
+            System.out.println("Error al exportar JSON: " + e.getMessage());
+        }
     }
 :};
 
@@ -156,8 +225,9 @@ programa ::= programa sentencia
 sentencia ::= DATABASE ID:n LLAVE_IZQ bloque_database:r LLAVE_DER
 {:
     baseActual = new BaseDatos(n.toString(), r);
-    System.out.println("Base de datos creada: " + n);
-    System.out.println("Ruta JSON: " + r);
+System.out.println("Base de datos creada: " + n);
+System.out.println("Ruta JSON: " + r);
+baseActual.cargarDesdeArchivo();
 :}
             | USE ID:n PTCOMA
 {:
@@ -169,7 +239,7 @@ sentencia ::= DATABASE ID:n LLAVE_IZQ bloque_database:r LLAVE_DER
 :}
             | EXPORT CADENA:r PTCOMA
 {:
-    System.out.println("Exportar a: " + r);
+    exportarJSON(r.toString().substring(1, r.toString().length() - 1));
 :}
             | TABLE ID:n LLAVE_IZQ lista_campos:lc LLAVE_DER
 {:
@@ -181,33 +251,33 @@ sentencia ::= DATABASE ID:n LLAVE_IZQ bloque_database:r LLAVE_DER
             tabla.agregarCampo(c.getNombre(), c.getTipo());
         }
 
-        baseActual.agregarTabla(tabla);
-        System.out.println("Tabla creada: " + n);
+       baseActual.agregarTabla(tabla);
+System.out.println("Tabla creada: " + n);
+baseActual.guardarEnArchivo();
     } else {
         System.out.println("Error: no hay una base de datos activa para crear la tabla " + n);
     }
 :}
             | ADD ID:n LLAVE_IZQ lista_asignaciones:la LLAVE_DER PTCOMA
 {:
-    if (baseActual != null) {
-        Tabla tabla = baseActual.buscarTabla(n.toString());
-
-        if (tabla != null) {
-            Map<String, Object> registro = new LinkedHashMap<String, Object>();
-
-            for (Object obj : la) {
-                AsignacionDato ad = (AsignacionDato)obj;
-                registro.put(ad.getCampo(), ad.getValor());
-            }
-
-            tabla.agregarRegistro(registro);
-            System.out.println("Registro agregado en tabla: " + n);
-        } else {
-            System.out.println("Error: la tabla '" + n + "' no existe.");
-        }
+   if (baseActual != null) {
+    if (baseActual.existeTabla(n.toString())) {
+        System.out.println("La tabla '" + n + "' ya existe. Se reutiliza la cargada desde archivo.");
     } else {
-        System.out.println("Error: no hay una base de datos activa.");
+        Tabla tabla = new Tabla(n.toString());
+
+        for (Object obj : lc) {
+            Campo c = (Campo)obj;
+            tabla.agregarCampo(c.getNombre(), c.getTipo());
+        }
+
+        baseActual.agregarTabla(tabla);
+        System.out.println("Tabla creada: " + n);
+        baseActual.guardarEnArchivo();
     }
+} else {
+    System.out.println("Error: no hay una base de datos activa para crear la tabla " + n);
+}
 :}
             | READ ID:n LLAVE_IZQ bloque_read:br LLAVE_DER PTCOMA
 {:
@@ -225,8 +295,9 @@ sentencia ::= DATABASE ID:n LLAVE_IZQ bloque_database:r LLAVE_DER
     if (baseActual != null) {
         Tabla tabla = baseActual.buscarTabla(n.toString());
         if (tabla != null) {
-            tabla.limpiarRegistros();
-            System.out.println("Tabla limpiada: " + n);
+           tabla.limpiarRegistros();
+System.out.println("Tabla limpiada: " + n);
+baseActual.guardarEnArchivo();
         } else {
             System.out.println("Error: la tabla '" + n + "' no existe.");
         }

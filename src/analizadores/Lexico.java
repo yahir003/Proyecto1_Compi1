@@ -393,6 +393,7 @@ public class Lexico implements java_cup.runtime.Scanner {
 
   /* user code: */
     public LinkedList<String> listaErrores = new LinkedList<>();
+    public LinkedList<TokenInfo> listaTokens = new LinkedList<>();
 
     private Symbol simbolo(int tipo) {
         return new Symbol(tipo, yyline + 1, yycolumn + 1, yytext());
@@ -409,6 +410,13 @@ public class Lexico implements java_cup.runtime.Scanner {
             " | Linea: " + (yyline + 1) +
             " | Columna: " + (yycolumn + 1)
         );
+
+        listaTokens.add(new TokenInfo(
+            token,
+            yytext(),
+            yyline + 1,
+            yycolumn + 1
+        ));
     }
 
     private void agregarError(String descripcion) {
@@ -839,7 +847,9 @@ public class Lexico implements java_cup.runtime.Scanner {
       if (zzInput == YYEOF && zzStartRead == zzCurrentPos) {
         zzAtEOF = true;
             zzDoEOF();
-          { return new java_cup.runtime.Symbol(sym.EOF); }
+              {
+                return new Symbol(sym.EOF);
+              }
       }
       else {
         switch (zzAction < 0 ? zzAction : ZZ_ACTION[zzAction]) {

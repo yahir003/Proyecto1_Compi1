@@ -15,6 +15,7 @@ import java.util.LinkedList;
 
 %{
     public LinkedList<String> listaErrores = new LinkedList<>();
+    public LinkedList<TokenInfo> listaTokens = new LinkedList<>();
 
     private Symbol simbolo(int tipo) {
         return new Symbol(tipo, yyline + 1, yycolumn + 1, yytext());
@@ -31,6 +32,13 @@ import java.util.LinkedList;
             " | Linea: " + (yyline + 1) +
             " | Columna: " + (yycolumn + 1)
         );
+
+        listaTokens.add(new TokenInfo(
+            token,
+            yytext(),
+            yyline + 1,
+            yycolumn + 1
+        ));
     }
 
     private void agregarError(String descripcion) {
@@ -103,7 +111,6 @@ blancos = [ \t\r\n\f]+
 "="          { imprimir("IGUAL"); return simbolo(sym.IGUAL); }
 "*"          { imprimir("ASTERISCO"); return simbolo(sym.ASTERISCO); }
 
-
 // ================= OPERADORES LOGICOS =================
 "&&"         { imprimir("AND"); return simbolo(sym.AND); }
 "||"         { imprimir("OR"); return simbolo(sym.OR); }
@@ -123,6 +130,9 @@ blancos = [ \t\r\n\f]+
 
 // ================= ESPACIOS =================
 {blancos}    { /* ignorar */ }
+
+// ================= FIN DE ARCHIVO =================
+<<EOF>>      { return new Symbol(sym.EOF); }
 
 // ================= ERRORES =================
 . {
