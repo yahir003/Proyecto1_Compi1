@@ -24,10 +24,19 @@ public class Analizadores {
         precio: 3500.50
     };
 
+    add productos {
+        id: 2,
+        nombre: "Mouse",
+        precio: 150.00
+    };
+
+    clear productos;
+
     read productos {
-        fields: *;
+        fields: nombre, precio;
     };
     """;
+
             Lexico lexer = new Lexico(new StringReader(entrada));
             Sintactico parser = new Sintactico(lexer);
 

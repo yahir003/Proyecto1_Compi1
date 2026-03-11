@@ -1,20 +1,17 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package analizadores;
 
-import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 public class BaseDatos {
     private String nombre;
+    private Map<String, Tabla> tablas;
     private String rutaArchivo;
-    private ArrayList<Tabla> tablas;
 
     public BaseDatos(String nombre, String rutaArchivo) {
         this.nombre = nombre;
         this.rutaArchivo = rutaArchivo;
-        this.tablas = new ArrayList<>();
+        this.tablas = new HashMap<>();
     }
 
     public String getNombre() {
@@ -25,25 +22,24 @@ public class BaseDatos {
         return rutaArchivo;
     }
 
-    public ArrayList<Tabla> getTablas() {
-        return tablas;
-    }
-
     public void setRutaArchivo(String rutaArchivo) {
         this.rutaArchivo = rutaArchivo;
     }
 
     public void agregarTabla(Tabla tabla) {
-        tablas.add(tabla);
+        tablas.put(tabla.getNombre(), tabla);
     }
 
     public Tabla buscarTabla(String nombreTabla) {
-        for (Tabla tabla : tablas) {
-            if (tabla.getNombre().equals(nombreTabla)) {
-                return tabla;
-            }
-        }
-        return null;
+        return tablas.get(nombreTabla);
+    }
+
+    public boolean existeTabla(String nombreTabla) {
+        return tablas.containsKey(nombreTabla);
+    }
+
+    public Map<String, Tabla> getTablas() {
+        return tablas;
     }
 
     public void mostrarTablas() {
@@ -56,8 +52,8 @@ public class BaseDatos {
             return;
         }
 
-        for (Tabla tabla : tablas) {
-            System.out.println(" - " + tabla.getNombre());
+        for (String nombreTabla : tablas.keySet()) {
+            System.out.println(" - " + nombreTabla);
         }
     }
 }

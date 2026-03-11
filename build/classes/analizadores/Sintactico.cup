@@ -3,6 +3,7 @@ package analizadores;
 import java_cup.runtime.Symbol;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.LinkedHashMap;
 
 parser code
 {:
@@ -35,7 +36,15 @@ parser code
             return;
         }
 
-        for (Registro registro : tabla.getRegistros()) {
+        boolean hayResultados = false;
+
+        for (Map<String, Object> registro : tabla.getRegistros()) {
+            if (consulta.getFiltro() != null && !cumpleFiltro(registro, consulta.getFiltro())) {
+                continue;
+            }
+
+            hayResultados = true;
+
             if (consulta.isTodosLosCampos()) {
                 System.out.println(registro);
             } else {
@@ -43,7 +52,7 @@ parser code
                 boolean primero = true;
 
                 for (String campo : consulta.getCampos()) {
-                    Object valor = registro.getValor(campo);
+                    Object valor = registro.get(campo);
 
                     if (!primero) {
                         sb.append(", ");
@@ -57,6 +66,41 @@ parser code
                 System.out.println(sb.toString());
             }
         }
+
+        if (!hayResultados) {
+            System.out.println("(sin resultados)");
+        }
+    }
+
+    public boolean cumpleFiltro(Map<String, Object> registro, ExpresionFiltro filtro){
+        return filtro.evaluar(registro);
+    }
+
+    public void ejecutarUpdate(String nombreTabla, ArrayList asignaciones, ExpresionFiltro filtro){
+        if (baseActual == null) {
+            System.out.println("Error: no hay una base de datos activa.");
+            return;
+        }
+
+        Tabla tabla = baseActual.buscarTabla(nombreTabla);
+        if (tabla == null) {
+            System.out.println("Error: la tabla '" + nombreTabla + "' no existe.");
+            return;
+        }
+
+        int actualizados = 0;
+
+        for (Map<String, Object> registro : tabla.getRegistros()) {
+            if (filtro == null || cumpleFiltro(registro, filtro)) {
+                for (Object obj : asignaciones) {
+                    AsignacionDato ad = (AsignacionDato) obj;
+                    registro.put(ad.getCampo(), ad.getValor());
+                }
+                actualizados++;
+            }
+        }
+
+        System.out.println("Registros actualizados en tabla '" + nombreTabla + "': " + actualizados);
     }
 :};
 
@@ -90,10 +134,10 @@ non terminal Object valor;
 
 non terminal ArrayList lista_ids;
 non terminal ConsultaResultado bloque_read;
-non terminal condicion;
-non terminal operador_relacional;
+non terminal ExpresionFiltro condicion;
+non terminal String operador_relacional;
 
-non terminal bloque_update;
+non terminal Object bloque_update;
 non terminal String bloque_database;
 non terminal ConsultaResultado seleccion_campos;
 non terminal ArrayList lista_set;
@@ -133,7 +177,8 @@ sentencia ::= DATABASE ID:n LLAVE_IZQ bloque_database:r LLAVE_DER
         Tabla tabla = new Tabla(n.toString());
 
         for (Object obj : lc) {
-            tabla.agregarCampo((Campo)obj);
+            Campo c = (Campo)obj;
+            tabla.agregarCampo(c.getNombre(), c.getTipo());
         }
 
         baseActual.agregarTabla(tabla);
@@ -148,11 +193,11 @@ sentencia ::= DATABASE ID:n LLAVE_IZQ bloque_database:r LLAVE_DER
         Tabla tabla = baseActual.buscarTabla(n.toString());
 
         if (tabla != null) {
-            Registro registro = new Registro();
+            Map<String, Object> registro = new LinkedHashMap<String, Object>();
 
             for (Object obj : la) {
                 AsignacionDato ad = (AsignacionDato)obj;
-                registro.agregarValor(ad.getCampo(), ad.getValor());
+                registro.put(ad.getCampo(), ad.getValor());
             }
 
             tabla.agregarRegistro(registro);
@@ -168,7 +213,13 @@ sentencia ::= DATABASE ID:n LLAVE_IZQ bloque_database:r LLAVE_DER
 {:
     mostrarConsulta(n.toString(), br);
 :}
-            | UPDATE ID LLAVE_IZQ bloque_update LLAVE_DER PTCOMA
+            | UPDATE ID:n LLAVE_IZQ bloque_update:bu LLAVE_DER PTCOMA
+{:
+    Object[] datos = (Object[]) bu;
+    ArrayList asignaciones = (ArrayList) datos[0];
+    ExpresionFiltro filtro = (ExpresionFiltro) datos[1];
+    ejecutarUpdate(n.toString(), asignaciones, filtro);
+:}
             | CLEAR ID:n PTCOMA
 {:
     if (baseActual != null) {
@@ -285,9 +336,9 @@ bloque_read ::= FIELDS DOS_PUNTOS seleccion_campos:s PTCOMA
 {:
     RESULT = s;
 :}
-              | FIELDS DOS_PUNTOS seleccion_campos:s PTCOMA FILTER DOS_PUNTOS condicion PTCOMA
+              | FIELDS DOS_PUNTOS seleccion_campos:s PTCOMA FILTER DOS_PUNTOS condicion:c PTCOMA
 {:
-    System.out.println("Aviso: filter reconocido sintacticamente, pero aun no aplicado semantica.");
+    s.setFiltro(c);
     RESULT = s;
 :}
               ;
@@ -320,8 +371,14 @@ lista_ids ::= lista_ids:l COMA ID:n
 :}
             ;
 
-bloque_update ::= SET DOS_PUNTOS lista_set PTCOMA FILTER DOS_PUNTOS condicion PTCOMA
-                | SET DOS_PUNTOS lista_set PTCOMA
+bloque_update ::= SET DOS_PUNTOS lista_set:l PTCOMA FILTER DOS_PUNTOS condicion:c PTCOMA
+{:
+    RESULT = new Object[]{l, c};
+:}
+                | SET DOS_PUNTOS lista_set:l PTCOMA
+{:
+    RESULT = new Object[]{l, null};
+:}
                 ;
 
 lista_set ::= lista_set:l COMA asignacion_set:a
@@ -343,17 +400,50 @@ asignacion_set ::= ID:n IGUAL valor:v
 :}
                  ;
 
-condicion ::= ID operador_relacional valor
-            | condicion AND condicion
-            | condicion OR condicion
-            | NOT condicion
-            | PAR_IZQ condicion PAR_DER
+condicion ::= condicion:c1 OR condicion:c2
+{:
+    RESULT = new FiltroOr(c1, c2);
+:}
+            | condicion:c1 AND condicion:c2
+{:
+    RESULT = new FiltroAnd(c1, c2);
+:}
+            | NOT condicion:c
+{:
+    RESULT = new FiltroNot(c);
+:}
+            | PAR_IZQ condicion:c PAR_DER
+{:
+    RESULT = c;
+:}
+            | ID:n operador_relacional:o valor:v
+{:
+    RESULT = new FiltroSimple(n.toString(), o, v);
+:}
             ;
 
 operador_relacional ::= IGUALIGUAL
+{:
+    RESULT = "==";
+:}
                       | DIFERENTE
+{:
+    RESULT = "!=";
+:}
                       | MAYORIGUAL
+{:
+    RESULT = ">=";
+:}
                       | MENORIGUAL
+{:
+    RESULT = "<=";
+:}
                       | MAYOR
+{:
+    RESULT = ">";
+:}
                       | MENOR
+{:
+    RESULT = "<";
+:}
                       ;

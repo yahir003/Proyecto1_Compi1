@@ -1,19 +1,18 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package analizadores;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 public class Tabla {
     private String nombre;
-    private ArrayList<Campo> campos;
-    private ArrayList<Registro> registros;
+    private Map<String, String> schema;
+    private List<Map<String, Object>> registros;
 
     public Tabla(String nombre) {
         this.nombre = nombre;
-        this.campos = new ArrayList<>();
+        this.schema = new LinkedHashMap<>();
         this.registros = new ArrayList<>();
     }
 
@@ -21,40 +20,39 @@ public class Tabla {
         return nombre;
     }
 
-    public ArrayList<Campo> getCampos() {
-        return campos;
+    public Map<String, String> getSchema() {
+        return schema;
     }
 
-    public ArrayList<Registro> getRegistros() {
+    public List<Map<String, Object>> getRegistros() {
         return registros;
     }
 
-    public void agregarCampo(Campo campo) {
-        campos.add(campo);
+    public void agregarCampo(String campo, String tipo) {
+        schema.put(campo, tipo);
     }
 
-    public void agregarRegistro(Registro registro) {
+    public void agregarRegistro(Map<String, Object> registro) {
         registros.add(registro);
+    }
+
+    public boolean existeCampo(String campo) {
+        return schema.containsKey(campo);
+    }
+
+    public String getTipoCampo(String campo) {
+        return schema.get(campo);
     }
 
     public void limpiarRegistros() {
         registros.clear();
     }
 
-    public Campo buscarCampo(String nombreCampo) {
-        for (Campo campo : campos) {
-            if (campo.getNombre().equals(nombreCampo)) {
-                return campo;
-            }
-        }
-        return null;
-    }
-
     public void mostrarEstructura() {
         System.out.println("Tabla: " + nombre);
         System.out.println("Campos:");
-        for (Campo campo : campos) {
-            System.out.println(" - " + campo);
+        for (Map.Entry<String, String> entry : schema.entrySet()) {
+            System.out.println(" - " + entry.getKey() + " : " + entry.getValue());
         }
     }
 
@@ -65,7 +63,7 @@ public class Tabla {
             return;
         }
 
-        for (Registro registro : registros) {
+        for (Map<String, Object> registro : registros) {
             System.out.println(registro);
         }
     }
