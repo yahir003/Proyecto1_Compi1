@@ -80,4 +80,37 @@ public class ReporteHTML {
                     .replace(">", "&gt;")
                     .replace("\"", "&quot;");
     }
+    public static void generarReporteSimbolos(java.util.ArrayList<SimboloTabla> simbolos, String ruta) {
+    try {
+        PrintWriter writer = new PrintWriter(ruta, "UTF-8");
+
+        writer.println("<html>");
+        writer.println("<head><meta charset='UTF-8'><title>Tabla de Símbolos</title></head>");
+        writer.println("<body>");
+        writer.println("<h1>Tabla de Símbolos</h1>");
+        writer.println("<table border='1' cellspacing='0' cellpadding='5'>");
+        writer.println("<tr><th>No.</th><th>Base de Datos</th><th>Tabla</th><th>Campo</th><th>Tipo</th></tr>");
+
+        int i = 1;
+        for (SimboloTabla simbolo : simbolos) {
+            writer.println("<tr>");
+            writer.println("<td>" + i + "</td>");
+            writer.println("<td>" + escaparHTML(simbolo.getBaseDatos()) + "</td>");
+            writer.println("<td>" + escaparHTML(simbolo.getTabla()) + "</td>");
+            writer.println("<td>" + escaparHTML(simbolo.getCampo()) + "</td>");
+            writer.println("<td>" + escaparHTML(simbolo.getTipo()) + "</td>");
+            writer.println("</tr>");
+            i++;
+        }
+
+        writer.println("</table>");
+        writer.println("</body>");
+        writer.println("</html>");
+        writer.close();
+
+        System.out.println("Reporte de simbolos generado en: " + ruta);
+    } catch (Exception e) {
+        System.out.println("Error al generar reporte de simbolos: " + e.getMessage());
+    }
+}
 }

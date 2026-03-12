@@ -235,4 +235,20 @@ public class BaseDatos {
         System.out.println("Error al cargar base de datos: " + e.getMessage());
     }
 }
+    public java.util.ArrayList<SimboloTabla> obtenerSimbolos() {
+    java.util.ArrayList<SimboloTabla> lista = new java.util.ArrayList<>();
+
+    for (Tabla tabla : tablas.values()) {
+        for (Map.Entry<String, String> campo : tabla.getSchema().entrySet()) {
+            lista.add(new SimboloTabla(
+                nombre,
+                tabla.getNombre(),
+                campo.getKey(),
+                campo.getValue()
+            ));
+        }
+    }
+
+    return lista;
+}
 }

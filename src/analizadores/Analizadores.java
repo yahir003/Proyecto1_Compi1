@@ -24,7 +24,14 @@ public class Analizadores {
             
             ReporteHTML.generarReporteTokens(lexer.listaTokens, "reporte_tokens.html");
             ReporteHTML.generarReporteErrores(lexer.listaErrores, "reporte_errores.html");
-
+               
+            if (Sintactico.baseActual != null) {
+    ReporteHTML.generarReporteSimbolos(
+        Sintactico.baseActual.obtenerSimbolos(),
+        "reporte_simbolos.html"
+    );
+}
+            
             System.out.println("Analisis realizado correctamente.");
 
         } catch (Exception e) {
